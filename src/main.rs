@@ -16,7 +16,7 @@ use std::{
     cmp::max,
     collections::BTreeMap,
     env, fs,
-    io::Write,
+    io::{Read, Write},
     path::{Path, PathBuf},
     process::{Command, Stdio},
     sync::{
@@ -121,6 +121,7 @@ fn new_project(opt: NewOpt) -> Result<()> {
 
     fs::remove_file(dir.join("src").join("main.rs"))?;
     fs::create_dir(dir.join("src").join("bin"))?;
+    fs::create_dir(dir.join("custom_cases"))?;
 
     for bin in bins {
         fs::write(
@@ -223,7 +224,7 @@ fn test(opt: TestOpt) -> Result<()> {
         return test_custom(package, &problem_id, opt.release);
     }
 
-    let test_cases = atc.test_cases(&problem.url)?;
+    let test_cases = itertools::concat(vec![atc.test_cases(&problem.url)?, custom_cases(&problem_id)?]);
 
     let mut tcs = vec![];
 
@@ -254,6 +255,35 @@ fn test(opt: TestOpt) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn custom_cases(problem_id: &str) -> Result<Vec<TestCase>>{
+    let custom_dir = Path::new("custom_cases");
+
+    let mut ret = vec![];
+    // Collect custom test cases whose file name starts with `problem_id`
+    for case in fs::read_dir(custom_dir)?.filter(|entry| entry.as_ref().unwrap()
+                                                 .file_name()
+                                                 .into_string()
+                                                 .unwrap()
+                                                 .starts_with(problem_id)){
+
+        let mut content = String::new();
+        fs::File::open(case.as_ref().unwrap().path()).unwrap().read_to_string(&mut content)?;
+
+        let v: Vec<&str> = content.split("\n\n").collect();
+        let (mut input, output) = (v[0].to_string(), v[1].to_string());
+
+        input.push('\n');
+
+        ret.push(TestCase {
+            name: format!("test_custom_{}", case.as_ref().unwrap().file_name().into_string().unwrap()),
+            input: input,
+            output: output,
+        });
+    }
+
+    Ok(ret)
 }
 
 fn test_samples(
@@ -598,7 +628,12 @@ async fn submit(opt: SubmitOpt) -> Result<()> {
     let test_passed = if opt.skip_test {
         true
     } else {
-        let test_cases = atc.test_cases(&problem.url)?;
+
+        let test_cases = itertools::concat(
+            vec![atc.test_cases(&problem.url)?,
+                 custom_cases(&problem_id)?
+            ]
+        );
         test_samples(package, &problem_id, &test_cases, opt.release, false)?
     };
 
