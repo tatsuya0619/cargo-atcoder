@@ -30,6 +30,7 @@ pub struct Problem {
 
 #[derive(Debug, Clone)]
 pub struct TestCase {
+    pub name: String,
     pub input: String,
     pub output: String,
 }
@@ -446,6 +447,7 @@ impl AtCoder {
         let mut ret = vec![];
         for i in 0..inputs.len() {
             ret.push(TestCase {
+                name: format!("test_sample{}", i+1),
                 input: inputs[i].clone(),
                 output: outputs[i].clone(),
             });

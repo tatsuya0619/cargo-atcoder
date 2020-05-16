@@ -184,7 +184,8 @@ struct TestOpt {
     problem_id: String,
     /// Specify case number to test (e.g. 1, 2, ...)
     #[structopt(conflicts_with = "custom")]
-    case_num: Vec<usize>,
+    target_case: Vec<String>,
+
     /// [cargo] Package with the target to test
     #[structopt(short, long, value_name("SPEC"))]
     package: Option<String>,
@@ -224,21 +225,24 @@ fn test(opt: TestOpt) -> Result<()> {
 
     let test_cases = atc.test_cases(&problem.url)?;
 
-    for &cn in opt.case_num.iter() {
-        if cn == 0 || cn > test_cases.len() {
-            bail!(
-                "Case num {} is not found in problem {} samples",
-                cn,
-                problem_id
-            );
+    let mut tcs = vec![];
+
+    if opt.target_case.is_empty(){
+        tcs = test_cases;
+    }else{
+        for tc in test_cases{
+            if opt.target_case.iter().all(|c| tc.name.contains(c)){
+                tcs.push(tc);
+            }
         }
     }
 
-    let mut tcs = vec![];
-    for (i, tc) in test_cases.into_iter().enumerate() {
-        if opt.case_num.is_empty() || opt.case_num.contains(&(i + 1)) {
-            tcs.push((i, tc));
-        }
+    if tcs.len() == 0{
+        bail!(
+            "Case {} is not found in problem {} samples",
+            opt.target_case.join(" "),
+            problem_id
+        );
     }
 
     let passed = test_samples(package, &problem_id, &tcs, opt.release, opt.verbose)?;
@@ -255,7 +259,7 @@ fn test(opt: TestOpt) -> Result<()> {
 fn test_samples(
     package: &Package,
     problem_id: &str,
-    test_cases: &[(usize, TestCase)],
+    test_cases: &[TestCase],
     release: bool,
     verbose: bool,
 ) -> Result<bool> {
@@ -281,7 +285,7 @@ fn test_samples(
     let red = Style::new().red();
     let cyan = Style::new().cyan();
 
-    for &(i, ref test_case) in test_cases.iter() {
+    for test_case in test_cases{
         let mut child = Command::new("cargo")
             .arg("run")
             .args(if release { vec!["--release"] } else { vec![] })
@@ -303,8 +307,8 @@ fn test_samples(
 
         let output = child.wait_with_output()?;
         if !output.status.success() {
-            println!("test sample {} ... {}", i + 1, red.apply_to("FAILED"));
-            fails.push((i, false, output));
+            println!("{} ... {}", test_case.name, red.apply_to("FAILED"));
+            fails.push((test_case.name.clone(), false, output));
             continue;
         }
 
@@ -322,14 +326,14 @@ fn test_samples(
 
         if !cmp_res.0 {
             println!(
-                "test sample {} ... {}{}",
-                i + 1,
+                "{} ... {}{}",
+                test_case.name,
                 red.apply_to("FAILED"),
                 ferr
             );
-            fails.push((i, true, output));
+            fails.push((test_case.name.clone(), true, output));
         } else {
-            println!("test sample {} ... {}{}", i + 1, green.apply_to("ok"), ferr);
+            println!("{} ... {}{}", test_case.name, green.apply_to("ok"), ferr);
             if verbose && !output.stderr.is_empty() {
                 println!("stderr:");
                 print_lines(&String::from_utf8_lossy(&output.stderr));
@@ -341,8 +345,8 @@ fn test_samples(
 
     let fail_num = fails.len();
 
-    for (case_no, exec_success, output) in fails {
-        println!("---- sample {} ----", case_no + 1);
+    for (case_name, exec_success, output) in fails {
+        println!("---- {} ----", case_name);
 
         if !exec_success {
             println!(
@@ -364,13 +368,14 @@ fn test_samples(
                 println!();
             }
         } else {
-            let tc = &test_cases.iter().find(|r| r.0 == case_no).unwrap().1;
+            let tc = &test_cases.iter().find(|r| r.name == case_name).unwrap();
 
             println!("{}:", cyan.apply_to("input"));
             print_lines(&tc.input);
             println!();
 
             println!("{}:", green.apply_to("expected output"));
+
             print_lines(&tc.output);
             println!();
 
@@ -593,11 +598,7 @@ async fn submit(opt: SubmitOpt) -> Result<()> {
     let test_passed = if opt.skip_test {
         true
     } else {
-        let test_cases = atc
-            .test_cases(&problem.url)?
-            .into_iter()
-            .enumerate()
-            .collect::<Vec<_>>();
+        let test_cases = atc.test_cases(&problem.url)?;
         test_samples(package, &problem_id, &test_cases, opt.release, false)?
     };
 
@@ -896,7 +897,6 @@ async fn watch_filesystem(package: &Package, atc: &AtCoder) -> Result<()> {
         file_hash.insert(problem_id.clone(), hash);
 
         let test_cases = atc.test_cases(&problem.url)?;
-        let test_cases = test_cases.into_iter().enumerate().collect::<Vec<_>>();
         let test_passed = test_samples(package, &problem_id, &test_cases, false, false)?;
 
         if !test_passed {
