@@ -23,8 +23,8 @@ fn for_samples() -> anyhow::Result<()> {
         |stdout| {
             stdout
                 == r#"running 2 tests
-test sample 1 ... ok
-test sample 2 ... ok
+test_sample1 ... ok
+test_sample2 ... ok
 
 test_result: ok
 
@@ -39,8 +39,8 @@ test_result: ok
         |stdout| {
             stdout.starts_with(
                 r#"running 2 tests
-test sample 1 ... FAILED
-test sample 2 ... FAILED
+test_sample1 ... FAILED
+test_sample2 ... FAILED
 "#,
             ) && stdout.ends_with(
                 r#"test result: FAILED. 0 passed; 2 failed
