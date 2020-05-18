@@ -260,24 +260,30 @@ fn test(opt: TestOpt) -> Result<()> {
 fn custom_cases(problem_id: &str) -> Result<Vec<TestCase>>{
     let custom_dir = Path::new("custom_cases");
 
+    let red = Style::new().red();
     let mut ret = vec![];
     // Collect custom test cases whose file name starts with `problem_id`
-    for case in fs::read_dir(custom_dir)?.filter(|entry| entry.as_ref().unwrap()
+    for entry in fs::read_dir(custom_dir)?.filter(|entry| entry.as_ref().unwrap()
                                                  .file_name()
                                                  .into_string()
                                                  .unwrap()
                                                  .starts_with(problem_id)){
 
         let mut content = String::new();
-        fs::File::open(case.as_ref().unwrap().path()).unwrap().read_to_string(&mut content)?;
-
+        fs::File::open(entry.as_ref().unwrap().path()).unwrap().read_to_string(&mut content)?;
+        let filename = entry.as_ref().unwrap().file_name().into_string().unwrap();
         let v: Vec<&str> = content.split("\n\n").collect();
+
+        if v.len() != 2{
+            println!("{}",red.apply_to(format!("Custom case {} is wrong format", filename)));
+            continue;
+        }
         let (mut input, output) = (v[0].to_string(), v[1].to_string());
 
         input.push('\n');
 
         ret.push(TestCase {
-            name: format!("test_custom_{}", case.as_ref().unwrap().file_name().into_string().unwrap()),
+            name: format!("test_custom_{}", filename),
             input: input,
             output: output,
         });
